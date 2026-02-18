@@ -5,7 +5,7 @@ const app = express();
 const PORT = 3000;
 
 app.get("/", (req, res) => {
-    res.send("🚀 Node.js app running on Kubernetes!");
+    res.send("🚀 Myyy Node.js app running on Kubernetes!");
 });
 
 app.get("/health", (req, res) => {
