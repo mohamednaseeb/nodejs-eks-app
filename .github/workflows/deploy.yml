@@ -8,7 +8,7 @@ on:
 env:
   ECR_REPOSITORY: nodejs-eks-app
   AWS_REGION: us-east-1
-  CLUSTER_NAME: my-eks-cluster
+  CLUSTER_NAME: node-cluster
   DEPLOYMENT_NAME: nodejs-app
 
 jobs:
@@ -32,22 +32,17 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    # Build Docker image
-    - name: Build Image
-      run: |
-        docker build -t $ECR_REPOSITORY:${{ github.sha }} .
-
-    # Tag Image
-    - name: Tag Image
-      run: |
-        docker tag $ECR_REPOSITORY:${{ github.sha }} \
-        ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:${{ github.sha }}
-
-    # Push Image
-    - name: Push Image
-      run: |
-        docker push \
-        ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:${{ github.sha }}
+    - name: Build, Tag, Push Image
+  env:
+    REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    IMAGE_TAG: ${{ github.sha }}
+  run: |
+    IMAGE_URI=$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+    
+    docker build -t $IMAGE_URI .
+    docker push $IMAGE_URI
+    
+    echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
 
     # Update kubeconfig
     - name: Update kubeconfig
@@ -56,10 +51,11 @@ jobs:
         --name $CLUSTER_NAME \
         --region $AWS_REGION
 
-    # Deploy to EKS
-    - name: Deploy
-      run: |
-        kubectl set image deployment/$DEPLOYMENT_NAME \
-        nodejs-app=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:${{ github.sha }}
+    - name: Deploy to EKS
+  run: |
+    kubectl set image deployment/$DEPLOYMENT_NAME \
+    nodejs-app=$IMAGE_URI
 
-        kubectl rollout status deployment/$DEPLOYMENT_NAME
+    kubectl rollout status deployment/$DEPLOYMENT_NAME --timeout=120s
+
+    kubectl get pods
